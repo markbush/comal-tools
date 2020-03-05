@@ -1,0 +1,6 @@
+**/*.o
+**/*.csv
+**/comald
+**/runner.cpp
+**/runner
+**/.settings
