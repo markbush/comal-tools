@@ -1,15 +1,17 @@
 #include "ParseOps.h"
 
+using namespace std::string_literals;
+
 static char ascii[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
-std::string toHex(std::vector<uint8_t>& line, size_t from, size_t to) {
+std::string hexCode(uint8_t op) {
+  return " "s + ascii[(op&0xf0)/16] + ascii[op&0xf];;
+}
+
+std::string toHex(std::vector<uint8_t>& line, size_t& from, size_t to) {
   std::string code = "";
-  for (size_t i=from; i<to; i++) {
-    auto& op = line[i];
-    uint8_t val = op;
-    code += " ";
-    code += ascii[(val&0xf0)/16];
-    code += ascii[val&0xf];
+  while (from < to) {
+    code += hexCode(line[from++]);
   }
   return code;
 }
@@ -22,10 +24,10 @@ std::string indentFor(size_t indent) {
   return std::string(indent, ' ');
 }
 
-std::string text(std::vector<uint8_t>& line, size_t from, size_t to) {
+std::string text(std::vector<uint8_t>& line, size_t& from, size_t to) {
   std::string code = "";
-  for (size_t i=from; i<to; i++) {
-    auto& c = line[i];
+  while (from < to) {
+    auto& c = line[from];
     if (c > 128) {
       code += (char)(c-128);
     } else if (c>=65 && c<=90) {
@@ -33,58 +35,71 @@ std::string text(std::vector<uint8_t>& line, size_t from, size_t to) {
     } else {
       code += (char)c;
     }
+    from++;
   }
   return code;
 }
 
-std::string rem(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "//";
+std::string rem(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " //";
   code += text(line, from, line.size());
   return code;
 }
 
-std::string endProc(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "ENDPROC";
+std::string endProc(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " ENDPROC";
+  code += toHex(line, from, line.size());
   return code;
 }
 
-std::string proc(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "PROC";
+std::string proc(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " PROC";
+  code += toHex(line, from, line.size());
   return code;
 }
 
-std::string dimString(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "DIM xxx$ OF nn";
+std::string dimString(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " DIM xxx$ OF nn";
+  code += toHex(line, from, line.size());
   return code;
 }
 
-std::string forReal(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "FOR x := aa TO bb";
+std::string forReal(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " FOR x := aa TO bb";
+  code += toHex(line, from, line.size());
   return code;
 }
 
-std::string forInteger(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "FOR x# := aa TO bb";
+std::string forInteger(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " FOR x# := aa TO bb";
+  code += toHex(line, from, line.size());
   return code;
 }
 
-std::string endForReal(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "ENDFOR";
+std::string endFor(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " ENDFOR [";
+  code += toHex(line, from, from+4);
+  code += "]";
   return code;
 }
 
-std::string endForInteger(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "ENDFOR";
+std::string endForReal(std::vector<uint8_t>& line, size_t& from) {
+  return endFor(line, from);
+}
+
+std::string endForInteger(std::vector<uint8_t>& line, size_t& from) {
+  return endFor(line, from);
+}
+
+std::string whileCond(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " WHILE";
+  code += toHex(line, from, line.size());
   return code;
 }
 
-std::string whileCond(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "WHILE";
-  return code;
-}
-
-std::string end(std::vector<uint8_t>& line, size_t from) {
-  std::string code = "END";
+std::string end(std::vector<uint8_t>& line, size_t& from) {
+  std::string code = " END";
+  code += toHex(line, from, line.size());
   return code;
 }
 
@@ -109,49 +124,38 @@ std::string decodeLine(size_t& indent, std::vector<uint8_t> line) {
   code += std::to_string(lineNum);
   size_t pos = 2;
   while (pos < lineSize) {
-    uint8_t op = line[pos];
+    uint8_t op = line[pos++];
+    uint8_t endOp = line[lineSize-1];
     if (op == 0x00) {
       code += indentFor(indent) + rem(line, pos);
-      pos = lineSize;
     } else if (op == 0x0e) {
       indent -= 2;
       code += indentFor(indent) + endProc(line, pos);
-      pos++;
     } else if (op == 0x70) {
       code += indentFor(indent) + proc(line, pos);
       indent += 2;
-      pos++;
     } else if (op == 0x82) {
       code += indentFor(indent) + forReal(line, pos);
-      indent += 2;
-      pos++;
+      if (endOp != 0x89) indent += 2;
     } else if (op == 0x83) {
       code += indentFor(indent) + forInteger(line, pos);
-      indent += 2;
-      pos++;
+      if (endOp != 0x89) indent += 2;
     } else if (op == 0x8a) {
       indent -= 2;
       code += indentFor(indent) + endForReal(line, pos);
-      pos++;
     } else if (op == 0x8b) {
       indent -= 2;
       code += indentFor(indent) + endForInteger(line, pos);
-      pos++;
     } else if (op == 0x8f) {
       code += indentFor(indent) + dimString(line, pos);
-      pos++;
     } else if (op == 0x97) {
       code += indentFor(indent) + whileCond(line, pos);
       indent += 2;
-      pos++;
     } else if (op == 0x9F) {
       code += indentFor(indent) + end(line, pos);
-      pos++;
-    } else if (op == 0xCF) {
-      pos++;
+    } else {
+      code += indentFor(indent) + hexCode(op) + toHex(line, pos, lineSize);
     }
-    code += indentFor(indent) + toHex(line, pos, lineSize);
-    pos = lineSize;
   }
 
   code += "\n";

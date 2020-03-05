@@ -23,7 +23,7 @@ bool BinaryParser::parse() {
   }
 
   auto iter = bytes.begin()+START_OFFSET;
-  size_t indent = 1;
+  size_t indent = 0;
   while (iter < bytes.end() && !eof(iter)) {
     std::vector<uint8_t> line = nextLine(iter);
     std::string code = decodeLine(indent, line);
