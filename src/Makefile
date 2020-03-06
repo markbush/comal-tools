@@ -9,7 +9,7 @@ SUBDIRS = parsers
 SOURCES = comald.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 HEADERS = */*.h
-LIB_OBJECTS = parsers/BinaryParser.o parsers/ParseOps.o
+LIB_OBJECTS = parsers/BinaryParser.o parsers/ParseOps.o parsers/ParseNames.o
 
 all:
 	make subdirs

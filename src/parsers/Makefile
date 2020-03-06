@@ -3,7 +3,7 @@ DEFAULT: all
 CXX = c++
 CXXFLAGS += -std=c++17
 
-SOURCES = BinaryParser.cpp ParseOps.cpp
+SOURCES = BinaryParser.cpp ParseOps.cpp ParseNames.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 all: $(OBJECTS)
@@ -13,3 +13,4 @@ all: $(OBJECTS)
 
 BinaryParser.o: BinaryParser.h
 ParseOps.o: ParseOps.h
+ParseNames.o: ParseNames.h
