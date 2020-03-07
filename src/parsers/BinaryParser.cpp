@@ -49,18 +49,10 @@ bool BinaryParser::parse() {
   auto iter = bytes.begin()+START_OFFSET;
   auto codeLimit = bytes.begin()+codeEnd;
   size_t indent = 0;
-  size_t codePos = 2048;
   while (iter < codeLimit) {
     std::vector<uint8_t> line = nextLine(iter);
-    size_t linePos = 0;
-    uint8_t lineHigh = (codePos&0xff00)/256;
-    uint8_t lineLow = codePos&0xff;
-    std::string debugLine = " [" + hexCode(lineLow) + " " + hexCode(lineHigh) + "]";
-    debugLine += toHex(line, linePos, line.size()) + "\n";
-    //result += debugLine;
     std::string code = decodeLine(names, indent, line);
     result += code;
-    codePos += line.size()+1;
   }
 
   output = result;

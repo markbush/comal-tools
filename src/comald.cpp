@@ -8,15 +8,15 @@
 
 using namespace std::string_literals;
 
-static Logger logger {"main"};
+static Logger logger {"main"s};
 
 static std::optional<std::string> parseInput(std::ifstream&);
 
 int main(int argc, char* argv[]) {
   logger.info("Start"s);
 
-  std::string outFileName = (argc<3)? "/dev/fd/1": argv[2];
-  std::string inFileName = (argc<2)? "/dev/fd/0": argv[1];
+  std::string outFileName = (argc<3)? "/dev/fd/1"s: ""s+argv[2];
+  std::string inFileName = (argc<2)? "/dev/fd/0"s: ""s+argv[1];
 
   logger.info("IN:  {}", inFileName);
   logger.info("OUT: {}", outFileName);
