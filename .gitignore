@@ -1,5 +1,6 @@
 **/*.o
 **/*.csv
+**/comalc
 **/comald
 **/runner.cpp
 **/runner
