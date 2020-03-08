@@ -109,15 +109,27 @@ static void varString(std::vector<std::string>& stack, std::map<size_t,std::stri
   stack.push_back(names[key]+"$");
 }
 
+static void refVarReal(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
+  size_t key = line[pos++];
+  key += line[pos++]*256;
+  stack.push_back("REF "+names[key]);
+}
+
+static void refVarInt(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
+  size_t key = line[pos++];
+  key += line[pos++]*256;
+  stack.push_back("REF "+names[key]+"#");
+}
+
+static void refVarString(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
+  size_t key = line[pos++];
+  key += line[pos++]*256;
+  stack.push_back("REF "+names[key]+"$");
+}
+
 static void dimensions(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
   size_t value = line[pos++];
   stack.push_back(""s);
-}
-
-static void group(std::vector<std::string>& stack) {
-  if (stack.size() < 1) return;
-  std::string expr = stack.back(); stack.pop_back();
-  stack.push_back("("+expr+")");
 }
 
 static void indentStack(std::vector<std::string>& stack) {
@@ -126,9 +138,19 @@ static void indentStack(std::vector<std::string>& stack) {
   stack.push_back(" "+expr);
 }
 
+static void keyword(std::vector<std::string>& stack, std::string op) {
+  stack.push_back(op);
+}
+
 static void func(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
   uint8_t op = line[pos++];
   switch (op) {
+    case 0x31: {
+      if (stack.size() < 1) return;
+      std::string expr = stack.back(); stack.pop_back();
+      stack.push_back(" TIME "+expr);
+      break;
+    }
     case 0x1f: stack.push_back("KEY$"s); break;
     default: break;
   }
@@ -138,6 +160,12 @@ static void func1(std::vector<std::string>& stack, std::string funcName) {
   if (stack.size() < 1) return;
   std::string expr = stack.back(); stack.pop_back();
   stack.push_back(funcName+"("+expr+")");
+}
+
+static void unaryOp(std::vector<std::string>& stack, std::string op) {
+  if (stack.size() < 1) return;
+  std::string expr = stack.back(); stack.pop_back();
+  stack.push_back(op+expr);
 }
 
 static void binaryOp(std::vector<std::string>& stack, std::string op) {
@@ -154,46 +182,68 @@ static void binaryOpReversed(std::vector<std::string>& stack, std::string op) {
   stack.push_back(expr1+op+expr2);
 }
 
-static void add(std::vector<std::string>& stack) {
-  binaryOp(stack, "+"s);
+static void rem(std::vector<std::string>& stack, std::vector<uint8_t>& line, size_t& pos) {
+  stack.push_back(" //"+text(line, pos, line.size()));
 }
+
+static void positive(std::vector<std::string>& stack) { unaryOp(stack, "+"s); }
+static void negative(std::vector<std::string>& stack) { unaryOp(stack, "-"s); }
+static void exp(std::vector<std::string>& stack) { binaryOp(stack, "^"s); }
+static void divide(std::vector<std::string>& stack) { binaryOp(stack, "/"s); }
+static void multiply(std::vector<std::string>& stack) { binaryOp(stack, "*"s); }
+static void div(std::vector<std::string>& stack) { binaryOp(stack, " DIV "s); }
+static void mod(std::vector<std::string>& stack) { binaryOp(stack, " MOD "s); }
+static void add(std::vector<std::string>& stack) { binaryOp(stack, "+"s); }
+static void subtract(std::vector<std::string>& stack) { binaryOp(stack, "-"s); }
+static void lessThan(std::vector<std::string>& stack) { binaryOp(stack, "<"s); }
+static void equals(std::vector<std::string>& stack) { binaryOp(stack, "="s); }
+static void lessThanOrEqual(std::vector<std::string>& stack) { binaryOp(stack, "<="s); }
+static void greaterThan(std::vector<std::string>& stack) { binaryOp(stack, ">"s); }
+static void notEquals(std::vector<std::string>& stack) { binaryOp(stack, "<>"s); }
+static void greaterThanOrEqual(std::vector<std::string>& stack) { binaryOp(stack, ">="s); }
+static void in(std::vector<std::string>& stack) { binaryOp(stack, " IN "s); }
+static void notOp(std::vector<std::string>& stack) { unaryOp(stack, "NOT "s); }
+static void andOp(std::vector<std::string>& stack) { binaryOp(stack, " AND "s); }
+static void orOp(std::vector<std::string>& stack) { binaryOp(stack, " OR "s); }
+
+static void compose(std::vector<std::string>& stack) { binaryOp(stack, ";"s); }
+static void zone(std::vector<std::string>& stack) { unaryOp(stack, " ZONE "s); }
+
+static void group(std::vector<std::string>& stack) {
+  if (stack.size() < 1) return;
+  std::string expr = stack.back(); stack.pop_back();
+  stack.push_back("("+expr+")");
+}
+
+static void abs(std::vector<std::string>& stack) { func1(stack, "ABS"s); }
+static void ord(std::vector<std::string>& stack) { func1(stack, "ORD"s); }
+static void atn(std::vector<std::string>& stack) { func1(stack, "ATN"s); }
+static void chr(std::vector<std::string>& stack) { func1(stack, "CHR$"s); }
+static void cos(std::vector<std::string>& stack) { func1(stack, "COS"s); }
+static void nl(std::vector<std::string>& stack) { func1(stack, "EXP"s); }
+static void intOp(std::vector<std::string>& stack) { func1(stack, "INT"s); }
+static void len(std::vector<std::string>& stack) { func1(stack, "LEN"s); }
+static void log(std::vector<std::string>& stack) { func1(stack, "LOG"s); }
+static void rnd0(std::vector<std::string>& stack) { keyword(stack, "RND"s); }
+static void rnd2(std::vector<std::string>& stack) { func1(stack, "RND"s); }
+static void rndComma(std::vector<std::string>& stack) { binaryOp(stack, ","s); }
+static void sgn(std::vector<std::string>& stack) { func1(stack, "SGN"s); }
+static void sin(std::vector<std::string>& stack) { func1(stack, "SIN"s); }
+static void spc(std::vector<std::string>& stack) { func1(stack, "SPC$"s); }
+static void sqr(std::vector<std::string>& stack) { func1(stack, "SQR"s); }
+static void tan(std::vector<std::string>& stack) { func1(stack, "TAN"s); }
+static void eof(std::vector<std::string>& stack) { func1(stack, "EOF"s); }
+
+static void str(std::vector<std::string>& stack) { func1(stack, "STR$"s); }
 
 static void incr(std::vector<std::string>& stack) {
   binaryOp(stack, ":+"s);
   indentStack(stack);
 }
 
-static void subtract(std::vector<std::string>& stack) {
-  binaryOp(stack, "-"s);
-}
-
 static void decr(std::vector<std::string>& stack) {
   binaryOp(stack, ":-"s);
   indentStack(stack);
-}
-
-static void multiply(std::vector<std::string>& stack) {
-  binaryOp(stack, "*"s);
-}
-
-static void divide(std::vector<std::string>& stack) {
-  binaryOp(stack, "/"s);
-}
-
-static void abs(std::vector<std::string>& stack) {
-  func1(stack, "ABS"s);
-}
-
-static void sin(std::vector<std::string>& stack) {
-  func1(stack, "SIN"s);
-}
-
-static void keyword(std::vector<std::string>& stack, std::string op) {
-  stack.push_back(op);
-}
-
-static void rem(std::vector<std::string>& stack, std::vector<uint8_t>& line, size_t& pos) {
-  stack.push_back(" //"+text(line, pos, line.size()));
 }
 
 static void dim(std::vector<std::string>& stack) {
@@ -206,6 +256,10 @@ static void null(std::vector<std::string>& stack) {
 
 static void use(std::vector<std::string>& stack) {
   stack.push_back(" USE "s);
+}
+
+static void stop(std::vector<std::string>& stack) {
+  stack.push_back(" STOP"s);
 }
 
 static void end(std::vector<std::string>& stack) {
@@ -251,7 +305,7 @@ static void procFlags(std::vector<std::string>& stack, std::vector<uint8_t>& lin
   stack.push_back(toHex(line, pos, pos+3));
 }
 
-static void procEnd(std::vector<std::string>& stack, std::vector<uint8_t>& line, size_t& pos) {
+static void procEnd(std::vector<std::string>& stack, std::vector<uint8_t>& line, size_t& pos, bool closed) {
   if (stack.size() < 4) return;
   std::string args = ""s;
   while (stack.size()>4) {
@@ -263,8 +317,15 @@ static void procEnd(std::vector<std::string>& stack, std::vector<uint8_t>& line,
   std::string offset = stack.back(); stack.pop_back();
   std::string name = stack.back(); stack.pop_back();
   std::string op = stack.back(); stack.pop_back();
-  stack.push_back(op+" "+name+"("+args+")");
-  pos += 4;
+  if (args.size()>0) {
+    args = "("+args+")";
+  }
+  if (closed) {
+    args += " CLOSED";
+    pos += 2;
+  }
+  stack.push_back(op+" "+name+args);
+  pos += 2;
 }
 
 static void endProc(std::vector<std::string>& stack) {
@@ -362,14 +423,6 @@ static void assign(std::vector<std::string>& stack) {
   indentStack(stack);
 }
 
-static void equals(std::vector<std::string>& stack) {
-  binaryOp(stack, "="s);
-}
-
-static void compose(std::vector<std::string>& stack) {
-  binaryOp(stack, ";"s);
-}
-
 static void handleOp(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
   uint8_t op = line[pos++];
   switch (op) {
@@ -387,30 +440,78 @@ static void handleOp(std::vector<std::string>& stack, std::map<size_t,std::strin
     case 0x0e: endProc(stack); varReal(stack, names, line, pos); endProc(stack); break;
     case 0x13: exec(stack); break;
     case 0x15: exec(stack); break;
+    case 0x16: exec(stack); break;
     case 0x18: exec(stack); break;
-    case 0x1a: varReal(stack, names, line, pos); break;
+    case 0x1a: varReal(stack, names, line, pos); break; // exec with args
+    case 0x20: positive(stack); break;
+    case 0x21: negative(stack); break;
+    case 0x22: exp(stack); break;
     case 0x23: divide(stack); break;
     case 0x24: multiply(stack); break;
+    case 0x25: div(stack); break;
+    case 0x26: mod(stack); break;
     case 0x27: add(stack); break;
     case 0x28: add(stack); break;
     case 0x29: subtract(stack); break;
+    case 0x2a: lessThan(stack); break;
+    case 0x2b: lessThan(stack); break;
+    case 0x2c: equals(stack); break;
     case 0x2d: equals(stack); break;
+    case 0x2e: lessThanOrEqual(stack); break;
+    case 0x2f: lessThanOrEqual(stack); break;
+    case 0x30: greaterThan(stack); break;
+    case 0x31: greaterThan(stack); break;
+    case 0x32: notEquals(stack); break;
+    case 0x33: notEquals(stack); break;
+    case 0x34: greaterThanOrEqual(stack); break;
+    case 0x35: greaterThanOrEqual(stack); break;
+    case 0x36: in(stack); break;
+    case 0x37: notOp(stack); break;
+    case 0x38: andOp(stack); break;
+    case 0x39: orOp(stack); break;
     case 0x3d: incr(stack); break;
     case 0x3e: incr(stack); break;
+    case 0x3f: incr(stack); break;
     case 0x40: decr(stack); break;
     case 0x41: decr(stack); break;
     case 0x42: compose(stack); break;
     case 0x43: keyword(stack, "TRUE"s); break;
     case 0x44: keyword(stack, "FALSE"s); break;
+    case 0x45: keyword(stack, "ZONE"s); break;
+    case 0x46: zone(stack); break;
     case 0x47: group(stack); break;
     case 0x48: abs(stack); break;
+    case 0x49: ord(stack); break;
+    case 0x4a: atn(stack); break;
+    case 0x4b: chr(stack); break;
+    case 0x4c: cos(stack); break;
+    case 0x4d: keyword(stack, "ESC"s); break;
+    case 0x4e: nl(stack); break;
+    case 0x4f: intOp(stack); break;
+    case 0x51: len(stack); break;
+    case 0x52: log(stack); break;
+    case 0x53: rnd0(stack); break;
+    case 0x54: rnd2(stack); break;
+    case 0x55: rndComma(stack); break;
+    case 0x56: sgn(stack); break;
     case 0x57: sin(stack); break;
+    case 0x58: spc(stack); break;
+    case 0x59: sqr(stack); break;
+    case 0x5a: tan(stack); break;
+    case 0x5b: keyword(stack, "TIME"s); break;
+    case 0x5c: keyword(stack, "EOD"s); break;
+    case 0x5d: eof(stack); break;
     case 0x70: proc(stack); varReal(stack, names, line, pos); constIntRev(stack, line, pos); procFlags(stack, line, pos); break;
     case 0x71: null(stack); break;
     case 0x72: varReal(stack, names, line, pos); break;
     case 0x73: varInt(stack, names, line, pos); break;
     case 0x74: varString(stack, names, line, pos); break;
-    case 0x7f: procEnd(stack, line, pos); break;
+    case 0x75: refVarReal(stack, names, line, pos); break;
+    case 0x76: refVarInt(stack, names, line, pos); break;
+    case 0x77: refVarString(stack, names, line, pos); break;
+    case 0x7e: procEnd(stack, line, pos, false); break;
+    case 0x7f: procEnd(stack, line, pos, true); break;
+    case 0x81: varReal(stack, names, line, pos); indentStack(stack); break; // exec with no args
     case 0x82: forStart(stack); varReal(stack, names, line, pos); constIntRev(stack, line, pos); break;
     case 0x83: forStart(stack); varInt(stack, names, line, pos); constIntRev(stack, line, pos); break;
     case 0x84: forFrom(stack); break;
@@ -428,10 +529,17 @@ static void handleOp(std::vector<std::string>& stack, std::map<size_t,std::strin
     case 0x99: whileDo(stack); break;
     case 0x9a: whileEnd(stack); break;
     case 0x9f: end(stack); break;
+    case 0xa0: stop(stack); break;
+    case 0xbf: keyword(stack, " TRAP"s); break;
+    case 0xc0: keyword(stack, " ESC"s); break;
+    case 0xc1: keyword(stack, "+"s); break;
+    case 0xc2: keyword(stack, "-"s); break;
     case 0xcd: constByteString(stack, line, pos); break;
     case 0xce: constByte(stack, line, pos); break;
     case 0xcf: break; // blank line
     case 0xd4: use(stack); varReal(stack, names, line, pos); break;
+    case 0xde: keyword(stack, "STATUS$"s); break;
+    case 0xea: str(stack); break;
     case 0xeb: import(stack); constIntRev(stack, line, pos); break;
     case 0xef: endImport(stack); break;
     case 0xf8: varString(stack, names, line, pos); assign(stack); break;
