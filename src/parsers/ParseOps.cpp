@@ -142,20 +142,6 @@ static void keyword(std::vector<std::string>& stack, std::string op) {
   stack.push_back(op);
 }
 
-static void func(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
-  uint8_t op = line[pos++];
-  switch (op) {
-    case 0x31: {
-      if (stack.size() < 1) return;
-      std::string expr = stack.back(); stack.pop_back();
-      stack.push_back(" TIME "+expr);
-      break;
-    }
-    case 0x1f: stack.push_back("KEY$"s); break;
-    default: break;
-  }
-}
-
 static void func1(std::vector<std::string>& stack, std::string funcName) {
   if (stack.size() < 1) return;
   std::string expr = stack.back(); stack.pop_back();
@@ -423,6 +409,20 @@ static void assign(std::vector<std::string>& stack) {
   indentStack(stack);
 }
 
+static void extendedOp(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
+  uint8_t op = line[pos++];
+  switch (op) {
+    case 0x31: {
+      if (stack.size() < 1) return;
+      std::string expr = stack.back(); stack.pop_back();
+      stack.push_back(" TIME "+expr);
+      break;
+    }
+    case 0x1f: stack.push_back("KEY$"s); break;
+    default: break;
+  }
+}
+
 static void handleOp(std::vector<std::string>& stack, std::map<size_t,std::string>& names, std::vector<uint8_t>& line, size_t& pos) {
   uint8_t op = line[pos++];
   switch (op) {
@@ -545,9 +545,8 @@ static void handleOp(std::vector<std::string>& stack, std::map<size_t,std::strin
     case 0xf8: varString(stack, names, line, pos); assign(stack); break;
     case 0xfa: varReal(stack, names, line, pos); assign(stack); break;
     case 0xfb: varInt(stack, names, line, pos); assign(stack); break;
-    case 0xff: func(stack, names, line, pos); break;
-    default:
-      break;
+    case 0xff: extendedOp(stack, names, line, pos); break;
+    default: break;
   }
 }
 

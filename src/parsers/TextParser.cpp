@@ -8,18 +8,8 @@ using namespace std::string_literals;
 static Logger logger {"TextParser"s};
 
 void TextParser::addNames(std::vector<uint8_t>& results) {
-  for (auto& name : names) {
-    uint8_t nameLen = name.size()+4;
-    results.push_back(nameLen);
-    for (size_t i=0; i<3; i++) results.push_back(0x00);
-    for (auto& c : name) {
-      uint8_t ch = c;
-      if (ch>=97 && ch<=122) {
-        ch -= 32;
-      }
-      results.push_back(ch);
-    }
-  }
+  std::vector<uint8_t> tableContent = names.contents();
+  results.insert(results.end(), tableContent.begin(), tableContent.end());
 }
 
 bool TextParser::parse() {
@@ -27,14 +17,20 @@ bool TextParser::parse() {
   std::vector<uint8_t> results {0xff, 0xff, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
   std::string line;
 
+  uint16_t autoLineNum = 0;
   while (std::getline(in, line)) {
     logger.info("{}", line);
 
-    std::vector<uint8_t> lineBytes = encode(names, line);
+    std::vector<uint8_t> lineBytes = encode(autoLineNum, names, line);
 
     results.insert(results.end(), lineBytes.begin(), lineBytes.end());
   }
-  for (size_t i=0; i<4; i++) results.push_back(0x00);
+  uint8_t lineNumHigh = autoLineNum/256;
+  uint8_t lineNumLow = autoLineNum&0xff;
+  results.push_back(lineNumHigh);
+  results.push_back(lineNumLow);
+  results.push_back(0x00);
+  results.push_back(0x9f); // dummy END statement
 
   uint16_t codeSize = results.size()-9;
   results[5] = codeSize&0xff;

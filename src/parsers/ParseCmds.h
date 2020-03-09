@@ -5,6 +5,10 @@
 #include <string>
 #include <stdint.h>
 
-std::vector<uint8_t> encode(std::vector<std::string>& names, std::string line);
+#include "NameTable.h"
+
+using Names = std::vector<std::pair<std::string,uint8_t>>;
+
+std::vector<uint8_t> encode(uint16_t& autoLineNum, NameTable& names, std::string line);
 
 #endif
