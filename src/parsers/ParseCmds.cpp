@@ -24,6 +24,11 @@ static void encodeExpr(std::vector<uint8_t>& bytes, NameTable& names, std::strin
     encodeExpr(bytes, names, remaining);
     bytes.push_back(0x21);
     return;
+  } else if (first == '+') {
+      std::string remaining = expr.substr(1, expr.size()-1);
+      encodeExpr(bytes, names, remaining);
+      bytes.push_back(0x20);
+      return;
   } else if (first>='0' && first<='9') {
     //double valueD = std::stod(expr); // TODO encode reals
     uint16_t valueI = std::stoi(expr);
@@ -38,8 +43,27 @@ static void encodeExpr(std::vector<uint8_t>& bytes, NameTable& names, std::strin
       bytes.push_back(valLow);
     }
   } else if (first == '"') { // TODO encode string
-    bytes.push_back(0xcd);
-    bytes.push_back(0x65);
+    std::string stringConst {};
+    for (size_t i=1; i<expr.size() && expr[i]!='"'; i++) {
+      uint8_t c = expr[i];
+      if (c>=97 && c<=122) {
+        c -= 32;
+      } else if (c>=65 && c<=90) {
+        c += 128;
+      }
+      stringConst += (char)c;
+    }
+    if (stringConst.size() == 0) {
+      bytes.push_back(0xcd);
+      bytes.push_back(0x00);
+    } else if (stringConst.size() == 1) {
+      bytes.push_back(0xcd);
+      bytes.push_back(stringConst[0]);
+    } else {
+      bytes.push_back(0x03);
+      bytes.push_back(stringConst.size());
+      for (uint8_t c : stringConst) bytes.push_back(c);
+    }
   } else if (std::regex_search(expr, match, regexNull)) {
     bytes.push_back(0x71);
   } else {
@@ -78,7 +102,7 @@ static void assignDelim(std::vector<uint8_t>& bytes) {
   bytes.push_back(0x42);
 }
 
-static const std::regex regexAssign("^([a-zA-Z']+)(#|\\$)?:[=+-]");
+static const std::regex regexAssign("^([a-zA-Z']+)(#|\\$)?:([=+-])");
 static bool checkAssign(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
   skipSpace(line, pos);
   size_t lineEnd = line.size();
@@ -91,21 +115,51 @@ static bool checkAssign(std::vector<uint8_t>& bytes, NameTable& names, std::stri
   if (match[2]=="#") type++;
   if (match[2]=="$") type += 2;
   names.add(varName, type);
+  uint16_t offset = names.offset(varName, type);
+  uint8_t offsetLow = offset&0xff;
+  uint8_t offsetHigh = offset/256;
+  std::string assignType = match[3];
   std::string matched = match[0];
   pos += matched.size();
 
   std::string expr = line.substr(pos, lineEnd-pos);
-  encodeExpr(bytes, names, expr);
-  skipToSemiColon(line, pos); // TODO parse assigned expression
-  switch (type) {
-    case 0x11: bytes.push_back(0xfb); break; // int
-    case 0x12: bytes.push_back(0xf8); break; // string
-    default: bytes.push_back(0xfa); break; // real
+  if (assignType == "=") {
+    encodeExpr(bytes, names, expr);
+    switch (type) {
+      case 0x11: bytes.push_back(0xfb); break; // int
+      case 0x12: bytes.push_back(0xf8); break; // string
+      default: bytes.push_back(0xfa); break; // real
+    }
+    bytes.push_back(offsetLow); bytes.push_back(offsetHigh);
+  } else {
+    switch (type) {
+      case 0x11: bytes.push_back(0x08); break; // int
+      case 0x12: bytes.push_back(0x09); break; // string
+      default: bytes.push_back(0x07); break; // real
+    }
+    bytes.push_back(offsetLow); bytes.push_back(offsetHigh);
+    encodeExpr(bytes, names, expr);
+    switch (type) {
+      case 0x11: // int
+        if (assignType == "+") {
+          bytes.push_back(0x3e);
+        } else {
+          bytes.push_back(0x41);
+        }
+        break;
+      case 0x12: // string
+          bytes.push_back(0x3f);
+        break;
+      default: // real
+        if (assignType == "+") {
+          bytes.push_back(0x3d);
+        } else {
+          bytes.push_back(0x40);
+        }
+        break;
+    }
   }
-  uint16_t offset = names.offset(varName, type);
-  uint8_t offsetLow = offset&0xff;
-  uint8_t offsetHigh = offset/256;
-  bytes.push_back(offsetLow); bytes.push_back(offsetHigh);
+  skipToSemiColon(line, pos); // TODO parse assigned expression
   return true;
 }
 
