@@ -8,11 +8,11 @@ static Logger logger {"ExprTokeniser"s};
 static int precedence(std::string op) {
   if (op=="Oor"s) return 2;
   if (op=="Oand"s) return 3;
-  if (op=="Onot"s) return 4;
-  if (op=="O="s || op=="O<>"s || op=="O<"s || op=="O>"s || op=="O<="s || op=="O>="s || op=="Oin"s) return 5;
-  if (op=="O+"s || op=="O-") return 6;
-  if (op=="O*"s || op=="O/"s || op=="Odiv"s || op=="Omod"s) return 7;
-  if (op=="O^"s) return 8;
+  if (op=="O="s || op=="O<>"s || op=="O<"s || op=="O>"s || op=="O<="s || op=="O>="s || op=="Oin"s) return 4;
+  if (op=="O+"s || op=="O-") return 5;
+  if (op=="O*"s || op=="O/"s || op=="Odiv"s || op=="Omod"s) return 6;
+  if (op=="O^"s) return 7;
+  if (op=="U-"s || op=="Unot"s) return 8;
   return 100;
 }
 
@@ -24,15 +24,16 @@ void ExprTokeniser::skipSpace() {
 }
 
 void ExprTokeniser::shuntOp() {
-  std::string otherOp = operators.back();
+  std::string op = operators.back();
   operators.pop_back();
-  tokens.push_back(otherOp);
+  tokens.push_back(op);
 }
 
 void ExprTokeniser::tokeniseOpenParen() {
   size_t inputSize = input_.size();
   operators.push_back("("s);
   input_ = input_.substr(1, inputSize-1);
+  unaryAllowed = true;
 }
 
 void ExprTokeniser::tokeniseCloseParen() {
@@ -95,9 +96,29 @@ bool ExprTokeniser::tokeniseOp(std::smatch& match) {
 
     operators.push_back("O"+op);
     input_ = input_.substr(matchedChars, inputSize-matchedChars);
+    unaryAllowed = true;
     return true;
   }
   return false;
+}
+
+void ExprTokeniser::tokeniseUnary() {
+  size_t inputSize = input_.size();
+  auto first = input_[0];
+  if (first == '-' || (inputSize >= 3 && input_.substr(0, 3) == "not")) {
+    std::string op {"Unot"s};
+    if (first == '-') op = "U-";
+    size_t matchedChars = op.size()-1;
+    int p = precedence(op);
+
+    while (operators.size() > 0 && operators.back() != "(" && precedence(operators.back()) >= p) {
+      shuntOp();
+    }
+
+    operators.push_back(op);
+    input_ = input_.substr(matchedChars, inputSize-matchedChars);
+    unaryAllowed = true;
+  }
 }
 
 bool ExprTokeniser::tokeniseVar(std::smatch& match) {
@@ -157,6 +178,7 @@ void ExprTokeniser::tokenise() {
   skipSpace();
   size_t inputSize = input_.size();
   if (inputSize == 0) return;
+  unaryAllowed = false;
 
   if (input_[0] == '(') { tokeniseOpenParen(); return; }
   if (input_[0] == ')') { tokeniseCloseParen(); return; }
@@ -175,6 +197,9 @@ void ExprTokeniser::tokenise() {
 std::vector<std::string> ExprTokeniser::getTokens() {
   if (tokens.size() == 0) {
     while (input_.size() > 0) {
+      if (unaryAllowed) {
+        tokeniseUnary();
+      }
       tokenise();
     }
     while (operators.size() > 0) {

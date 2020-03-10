@@ -38,7 +38,7 @@ public:
   }
 
   void testNegAdd(void) {
-    // -(a + b) => a b + -
+    // -(a + b) => a b + neg
     std::string expr {"-(12 + 34)"s};
     ExprTokeniser tokeniser {expr};
 
@@ -48,6 +48,6 @@ public:
     TS_ASSERT_EQUALS(tokens[0], "N12");
     TS_ASSERT_EQUALS(tokens[1], "N34");
     TS_ASSERT_EQUALS(tokens[2], "O"+addOp);
-    TS_ASSERT_EQUALS(tokens[3], "O"+subOp);
+    TS_ASSERT_EQUALS(tokens[3], "U-");
   }
 };

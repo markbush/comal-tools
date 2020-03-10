@@ -10,6 +10,7 @@ protected:
   std::string input_;
   std::vector<std::string> tokens {};
   std::vector<std::string> operators {};
+  bool unaryAllowed {true};
   void skipSpace();
   void tokeniseOpenParen();
   void tokeniseCloseParen();
@@ -17,6 +18,7 @@ protected:
   bool tokeniseBool(std::smatch& match);
   bool tokeniseFunc(std::smatch& match);
   bool tokeniseOp(std::smatch& match);
+  void tokeniseUnary();
   bool tokeniseVar(std::smatch& match);
   void tokeniseString();
   void shuntOp();

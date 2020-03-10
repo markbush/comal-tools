@@ -72,7 +72,7 @@ public:
 
     TS_ASSERT_EQUALS(tokens.size(), 2);
     TS_ASSERT_EQUALS(tokens[0], "B"+falseVal);
-    TS_ASSERT_EQUALS(tokens[1], "O"+notOp);
+    TS_ASSERT_EQUALS(tokens[1], "U"+notOp);
   }
 
   void testNotAnd(void) {
@@ -84,7 +84,7 @@ public:
 
     TS_ASSERT_EQUALS(tokens.size(), 4);
     TS_ASSERT_EQUALS(tokens[0], "B"+falseVal);
-    TS_ASSERT_EQUALS(tokens[1], "O"+notOp);
+    TS_ASSERT_EQUALS(tokens[1], "U"+notOp);
     TS_ASSERT_EQUALS(tokens[2], "B"+trueVal);
     TS_ASSERT_EQUALS(tokens[3], "O"+andOp);
   }
