@@ -3,7 +3,7 @@ DEFAULT: all
 CXX = c++
 CXXFLAGS += -std=c++17
 
-SOURCES = BinaryParser.cpp ParseOps.cpp ParseNames.cpp TextParser.cpp ParseCmds.cpp NameTable.cpp
+SOURCES = BinaryParser.cpp ParseOps.cpp ParseNames.cpp TextParser.cpp ParseCmds.cpp NameTable.cpp ExprTokeniser.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
 
 all: $(OBJECTS)
@@ -17,3 +17,4 @@ ParseNames.o: ParseNames.h
 TextParser.o: TextParser.h
 ParseCmds.o: ParseCmds.h
 NameTable.o: NameTable.h
+ExprTokeniser.o: ExprTokeniser.h

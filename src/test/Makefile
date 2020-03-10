@@ -10,16 +10,16 @@ HEADERS = $(TESTS)
 
 SOURCES = runner.cpp
 OBJECTS = $(SOURCES:.cpp=.o)
-#LIB_OBJECTS = ../*/*.o
+LIB_OBJECTS = ../parsers/*.o
 
 test: $(TARGET)
 	./$(TARGET)
 
-$(TARGET): $(OBJECTS)
-	$(CXX) $(CXXFLAGS) -o $@ $< #$(LIB_OBJECTS)
+$(TARGET): $(OBJECTS) $(LIB_OBJECTS)
+	$(CXX) $(CXXFLAGS) -o $@ $< $(LIB_OBJECTS)
 
 %.cpp.o: $(SOURCES)
 	$(CXX) -c $(CXXFLAGS) -o $^ $<
 
-$(SOURCES): $(HEADERS) $(LIB_OBJECTS)
+$(SOURCES): $(HEADERS)
 	cxxtestgen --error-printer -o $@ $(TESTS)

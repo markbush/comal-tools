@@ -21,6 +21,9 @@ LIB_OBJECTS_C = parsers/TextParser.o parsers/ParseCmds.o parsers/NameTable.o
 SOURCES = $(SOURCES_D) $(SOURCES_C)
 OBJECTS = $(OBJECTS_D) $(OBJECTS_C)
 LIB_OBJECTS = $(LIB_OBJECTS_D) $(LIB_OBJECTS_C)
+LIB_SOURCES = $(LIB_OBJECTS:.o=.cpp) */*.h
+
+TEST_TARGET = test/runner
 
 all:
 	make subdirs
@@ -40,7 +43,7 @@ subdirs:
 
 $(OBJECTS): $(HEADERS)
 
-test: $(TARGET)
+test: $(LIB_SOURCES)
 	cd test ; make
 
 clean:
