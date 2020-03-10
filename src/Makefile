@@ -16,7 +16,7 @@ LIB_OBJECTS_D = parsers/BinaryParser.o parsers/ParseOps.o parsers/ParseNames.o
 
 SOURCES_C = comalc.cpp
 OBJECTS_C = $(SOURCES_C:.cpp=.o)
-LIB_OBJECTS_C = parsers/TextParser.o parsers/ParseCmds.o parsers/NameTable.o
+LIB_OBJECTS_C = parsers/TextParser.o parsers/ParseCmds.o parsers/NameTable.o parsers/ExprTokeniser.o
 
 SOURCES = $(SOURCES_D) $(SOURCES_C)
 OBJECTS = $(OBJECTS_D) $(OBJECTS_C)

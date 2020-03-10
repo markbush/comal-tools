@@ -6,13 +6,14 @@ using namespace std::string_literals;
 static Logger logger {"ExprTokeniser"s};
 
 static int precedence(std::string op) {
+  if (op=="O,"s) return 9;
   if (op=="Oor"s) return 2;
   if (op=="Oand"s) return 3;
   if (op=="O="s || op=="O<>"s || op=="O<"s || op=="O>"s || op=="O<="s || op=="O>="s || op=="Oin"s) return 4;
   if (op=="O+"s || op=="O-") return 5;
   if (op=="O*"s || op=="O/"s || op=="Odiv"s || op=="Omod"s) return 6;
   if (op=="O^"s) return 7;
-  if (op=="U-"s || op=="Unot"s) return 8;
+  if (op=="U-"s || op=="U+"s || op=="Unot"s) return 8;
   return 100;
 }
 
@@ -75,6 +76,9 @@ bool ExprTokeniser::tokeniseFunc(std::smatch& match) {
   size_t inputSize = input_.size();
   std::string op = match[1];
   size_t matchedChars = op.size();
+  if (op == "rnd(") {
+    matchedChars--;
+  }
   if (op.size() > 0) {
     operators.push_back("F"+op);
     input_ = input_.substr(matchedChars, inputSize-matchedChars);
@@ -105,9 +109,9 @@ bool ExprTokeniser::tokeniseOp(std::smatch& match) {
 void ExprTokeniser::tokeniseUnary() {
   size_t inputSize = input_.size();
   auto first = input_[0];
-  if (first == '-' || (inputSize >= 3 && input_.substr(0, 3) == "not")) {
+  if (first == '-' || first == '+' || (inputSize >= 3 && input_.substr(0, 3) == "not")) {
     std::string op {"Unot"s};
-    if (first == '-') op = "U-";
+    if (first == '-' || first == '+') op = "U"s + first;
     size_t matchedChars = op.size()-1;
     int p = precedence(op);
 
@@ -168,8 +172,8 @@ void ExprTokeniser::tokeniseString() {
 
 static const std::regex regexNumber("^([0-9]*(\\.[0-9]*)?(e(\\+|-|)[0-9]+)?)", std::regex_constants::icase);
 static const std::regex regexBool("^(true|false)", std::regex_constants::icase);
-static const std::regex regexOperator("^(\\+|-|\\*|/|\\^|div|mod|in|=|<>|<=|>=|<|>|and|or|not)", std::regex_constants::icase);
-static const std::regex regexFunc("^(abs|ord|atn|chr\\$|cos|exp|int|len|log|rnd|sgn|sin|spc\\$|sqr|tan)", std::regex_constants::icase);
+static const std::regex regexOperator("^(,|\\+|-|\\*|/|\\^|div|mod|in|=|<>|<=|>=|<|>|and|or|not)", std::regex_constants::icase);
+static const std::regex regexFunc("^(abs|ord|atn|chr\\$|cos|eof|exp|int|len|log|rnd\\(|rnd|sgn|sin|spc\\$|sqr|str\\$|tan)", std::regex_constants::icase);
 static const std::regex regexVar("^([a-z][a-z0-9'\\\\\\[\\]_]*(#|\\$|))");
 
 // tokenise using shunting yard algorithm
@@ -190,13 +194,14 @@ void ExprTokeniser::tokenise() {
   if (input_[0] == '"') { tokeniseString(); return; }
 
   logger.warn("FAILED: <{}>", input_);
-  tokens.push_back("null"s);
+  //tokens.push_back("null"s);
   input_ = "";
 }
 
 std::vector<std::string> ExprTokeniser::getTokens() {
   if (tokens.size() == 0) {
     while (input_.size() > 0) {
+      if (input_[0] == ';') break; // end of expression
       if (unaryAllowed) {
         tokeniseUnary();
       }

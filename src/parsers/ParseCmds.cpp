@@ -1,4 +1,5 @@
 #include "ParseCmds.h"
+#include "ExprTokeniser.h"
 
 #include "../logger/Logger.h"
 
@@ -14,72 +15,209 @@ static void encodeNull(std::vector<uint8_t>& bytes, size_t& pos) {
   pos += 3;
 }
 
+static void showTokens(std::vector<std::string>& tokens) {
+  std::string tokenString {};
+  for (auto& token : tokens) {
+    tokenString += token + " ";
+  }
+  logger.info("PARSE: {}", tokenString);
+}
+
+uint8_t toLower(uint8_t c) {
+  if (c>=65 && c<=90) return c+32;
+  return c;
+}
+
+static std::string toLower(std::string value) {
+  std::string result {};
+  for (auto& c : value) {
+    result += toLower(c);
+  }
+  return result;
+}
+
+static uint8_t encodeChar(uint8_t c) {
+  if (c>=97 && c<=122) {
+    return c - 32;
+  } else if (c>=65 && c<=90) {
+    return c + 128;
+  } else {
+    return c;
+  }
+}
+
+static void encodeNumber(std::vector<uint8_t>& bytes, std::string token) {
+  //double valueD = std::stod(expr); // TODO encode reals
+  uint16_t valueI = std::stoi(token);
+  uint8_t valHigh = valueI/256;
+  uint8_t valLow = valueI&0xff;
+  if (valHigh == 0x00) {
+    bytes.push_back(0xce);
+    bytes.push_back(valLow);
+  } else {
+    bytes.push_back(0x02);
+    bytes.push_back(valHigh);
+    bytes.push_back(valLow);
+  }
+}
+
+static void encodeBool(std::vector<uint8_t>& bytes, std::string token) {
+  std::string boolVal = toLower(token);
+  if (boolVal == "true") bytes.push_back(0x43);
+  if (boolVal == "false") bytes.push_back(0x44);
+}
+// abs|ord|atn|chr\\$|cos|eof|exp|int|len|log|rnd|sgn|sin|spc\\$|sqr|str\\$|tan
+static void encodeFunc(std::vector<uint8_t>& bytes, std::string token) {
+  std::string func = toLower(token);
+  if (func == "abs") bytes.push_back(0x48);
+  else if (func == "ord") bytes.push_back(0x49);
+  else if (func == "atn") bytes.push_back(0x4a);
+  else if (func == "chr$") bytes.push_back(0x4b);
+  else if (func == "cos") bytes.push_back(0x4c);
+  else if (func == "eof") bytes.push_back(0x5d);
+  else if (func == "exp") bytes.push_back(0x4e);
+  else if (func == "int") bytes.push_back(0x4f);
+  else if (func == "len") bytes.push_back(0x51);
+  else if (func == "log") bytes.push_back(0x52);
+  else if (func == "rnd") bytes.push_back(0x53); // TODO multi arg form
+  else if (func == "rnd(") bytes.push_back(0x54); // TODO multi arg form
+  else if (func == "sgn") bytes.push_back(0x56);
+  else if (func == "sin") bytes.push_back(0x57);
+  else if (func == "spc$") bytes.push_back(0x58);
+  else if (func == "sqr") bytes.push_back(0x59);
+  else if (func == "str$") bytes.push_back(0xea);
+  else if (func == "tan") bytes.push_back(0x5a);
+}
+
+static void encodeOp(std::vector<uint8_t>& bytes, std::string token, std::string prev) {
+  if (token[0] == '+') {
+    logger.info("+ {}", prev);
+  }
+  if (prev[0] == 'S' || prev[prev.size()-1] == '$') { // must be string op
+    logger.info("string op");
+    switch (token[0]) {
+      case '+': bytes.push_back(0x28); break;
+      case '=': bytes.push_back(0x2d); break;
+      case '<':
+        if (token.size() == 1) {
+          bytes.push_back(0x2b);
+        } else if (token[1] == '=') {
+          bytes.push_back(0x2f);
+        } else {
+          bytes.push_back(0x33); // <>
+        }
+        break;
+      case '>':
+        if (token.size() == 1) {
+          bytes.push_back(0x31);
+        } else {
+          bytes.push_back(0x35); // >=
+        }
+        break;
+    }
+  }
+  switch (toLower(token[0])) {
+    case ',': bytes.push_back(0x55); break;
+    case '+': bytes.push_back(0x27); break;
+    case '-': bytes.push_back(0x29); break;
+    case '*': bytes.push_back(0x24); break;
+    case '/': bytes.push_back(0x23); break;
+    case '^': bytes.push_back(0x22); break;
+    case 'd': bytes.push_back(0x25); break; // div
+    case 'm': bytes.push_back(0x26); break; // mod
+    case 'i': bytes.push_back(0x36); break; // in
+    case '=': bytes.push_back(0x2c); break;
+    case '<':
+      if (token.size() == 1) {
+        bytes.push_back(0x2a);
+      } else if (token[1] == '=') {
+        bytes.push_back(0x2e);
+      } else {
+        bytes.push_back(0x32); // <>
+      }
+      break;
+    case '>':
+      if (token.size() == 1) {
+        bytes.push_back(0x30);
+      } else {
+        bytes.push_back(0x34); // >=
+      }
+      break;
+    case 'a': bytes.push_back(0x38); break; // and
+    case 'o': bytes.push_back(0x39); break; // or
+    case 'n': bytes.push_back(0x37); break; // not
+  }
+}
+
+static void encodeVar(std::vector<uint8_t>& bytes, NameTable& names, std::string token) {
+  size_t varNameLen = token.size();
+  if (varNameLen == 0) return;
+  uint8_t last = token[varNameLen-1];
+  if (last == '$' || last == '#') varNameLen--;
+  std::string varName = token.substr(0, varNameLen);
+  uint8_t type = 0x10;
+  if (last=='#') type++;
+  if (last=='$') type += 2;
+  uint16_t varOffset = names.offset(varName, type);
+  uint8_t offsetHigh = varOffset/256;
+  uint8_t offsetLow = varOffset&0xff;
+  bytes.push_back(0x04);
+  bytes.push_back(offsetLow);
+  bytes.push_back(offsetHigh);
+}
+
+static void encodeUnary(std::vector<uint8_t>& bytes, std::string token) {
+  if (token == "+") bytes.push_back(0x20);
+  if (token == "-") bytes.push_back(0x21);
+  if (toLower(token) == "not") bytes.push_back(0x37);
+}
+
+static void encodeString(std::vector<uint8_t>& bytes, std::string token) {
+  if (token.size() == 0) {
+    bytes.push_back(0xcd);
+    bytes.push_back(0x00);
+  } else if (token.size() == 1) {
+    bytes.push_back(0xcd);
+    bytes.push_back(encodeChar(token[0]));
+  } else {
+    bytes.push_back(0x03);
+    bytes.push_back(token.size());
+    for (uint8_t c : token) bytes.push_back(encodeChar(c));
+  }
+}
+
+static void encodeToken(std::vector<uint8_t>& bytes, NameTable& names, std::string token, std::string prev) {
+  size_t tokenSize = token.size()-1;
+  if (tokenSize <= 0) return;
+  uint8_t type = token[0];
+  std::string value = token.substr(1, tokenSize);
+  switch (type) {
+    case 'N': encodeNumber(bytes, value); break;
+    case 'B': encodeBool(bytes, value); break;
+    case 'F': encodeFunc(bytes, value); break;
+    case 'O': encodeOp(bytes, value, prev); break;
+    case 'V': encodeVar(bytes, names, value); break;
+    case 'U': encodeUnary(bytes, value); break;
+    case 'S': encodeString(bytes, value); break;
+    default: logger.error("UNKNOWN TOKEN <{}>", token);
+  }
+}
+
 static const std::regex regexNull("^null$", std::regex_constants::icase);
 static void encodeExpr(std::vector<uint8_t>& bytes, NameTable& names, std::string expr) {
   if (expr.size() == 0) return;
   std::smatch match;
-  uint8_t first = expr[0];
-  if (first == '-') {
-    std::string remaining = expr.substr(1, expr.size()-1);
-    encodeExpr(bytes, names, remaining);
-    bytes.push_back(0x21);
-    return;
-  } else if (first == '+') {
-      std::string remaining = expr.substr(1, expr.size()-1);
-      encodeExpr(bytes, names, remaining);
-      bytes.push_back(0x20);
-      return;
-  } else if (first>='0' && first<='9') {
-    //double valueD = std::stod(expr); // TODO encode reals
-    uint16_t valueI = std::stoi(expr);
-    uint8_t valHigh = valueI/256;
-    uint8_t valLow = valueI&0xff;
-    if (valHigh == 0x00) {
-      bytes.push_back(0xce);
-      bytes.push_back(valLow);
-    } else {
-      bytes.push_back(0x02);
-      bytes.push_back(valHigh);
-      bytes.push_back(valLow);
-    }
-  } else if (first == '"') { // TODO encode string
-    std::string stringConst {};
-    for (size_t i=1; i<expr.size() && expr[i]!='"'; i++) {
-      uint8_t c = expr[i];
-      if (c>=97 && c<=122) {
-        c -= 32;
-      } else if (c>=65 && c<=90) {
-        c += 128;
-      }
-      stringConst += (char)c;
-    }
-    if (stringConst.size() == 0) {
-      bytes.push_back(0xcd);
-      bytes.push_back(0x00);
-    } else if (stringConst.size() == 1) {
-      bytes.push_back(0xcd);
-      bytes.push_back(stringConst[0]);
-    } else {
-      bytes.push_back(0x03);
-      bytes.push_back(stringConst.size());
-      for (uint8_t c : stringConst) bytes.push_back(c);
-    }
-  } else if (std::regex_search(expr, match, regexNull)) {
+  if (std::regex_search(expr, match, regexNull)) {
     bytes.push_back(0x71);
-  } else {
-    size_t varNameLen = expr.size();
-    uint8_t last = expr[varNameLen-1];
-    if (last == '$' || last == '#') varNameLen--;
-    std::string varName = expr.substr(0, varNameLen);
-    uint8_t type = 0x10;
-    if (last=='#') type++;
-    if (last=='$') type += 2;
-    uint16_t varOffset = names.offset(varName, type);
-    uint8_t offsetHigh = varOffset/256;
-    uint8_t offsetLow = varOffset&0xff;
-    bytes.push_back(0x04);
-    bytes.push_back(offsetLow);
-    bytes.push_back(offsetHigh);
+    return;
+  }
+  ExprTokeniser tokeniser {expr};
+  std::vector<std::string> tokens = tokeniser.getTokens();
+  showTokens(tokens);
+  std::string prev {"X"s};
+  for (auto& token : tokens) {
+    encodeToken(bytes, names, token, prev);
+    prev = token;
   }
 }
 
