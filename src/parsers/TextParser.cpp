@@ -25,8 +25,9 @@ bool TextParser::parse() {
 
     results.insert(results.end(), lineBytes.begin(), lineBytes.end());
   }
-  uint8_t lineNumHigh = autoLineNum/256;
-  uint8_t lineNumLow = autoLineNum&0xff;
+  uint16_t lastLineNum = autoLineNum+10000;
+  uint8_t lineNumHigh = lastLineNum/256;
+  uint8_t lineNumLow = lastLineNum&0xff;
   results.push_back(lineNumHigh);
   results.push_back(lineNumLow);
   results.push_back(0x00);

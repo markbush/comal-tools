@@ -106,7 +106,7 @@ static void encodeFunc(std::vector<uint8_t>& bytes, std::string token) {
   else if (func == "len") bytes.push_back(0x51);
   else if (func == "log") bytes.push_back(0x52);
   else if (func == "rnd") bytes.push_back(0x53);
-  else if (func == "rnd(") bytes.push_back(0x54);
+  else if (func == "rnd(") { bytes.push_back(0x55); bytes.push_back(0x54); }
   else if (func == "sgn") bytes.push_back(0x56);
   else if (func == "sin") bytes.push_back(0x57);
   else if (func == "spc$") bytes.push_back(0x58);
@@ -121,9 +121,10 @@ static void encodeFunc(std::vector<uint8_t>& bytes, std::string token) {
 static void encodeOp(std::vector<uint8_t>& bytes, std::string token, std::string prev) {
   if (prev[0] == 'S' || prev[prev.size()-1] == '$') { // must be string op
     logger.info("string op");
-    switch (token[0]) {
+    switch (toLower(token[0])) {
       case '+': bytes.push_back(0x28); break;
       case '=': bytes.push_back(0x2d); break;
+      case 'i': bytes.push_back(0x36); break; // in
       case '<':
         if (token.size() == 1) {
           bytes.push_back(0x2b);
@@ -141,6 +142,7 @@ static void encodeOp(std::vector<uint8_t>& bytes, std::string token, std::string
         }
         break;
     }
+    return;
   }
   switch (toLower(token[0])) {
     case '+': bytes.push_back(0x27); break;
@@ -150,7 +152,6 @@ static void encodeOp(std::vector<uint8_t>& bytes, std::string token, std::string
     case '^': bytes.push_back(0x22); break;
     case 'd': bytes.push_back(0x25); break; // div
     case 'm': bytes.push_back(0x26); break; // mod
-    case 'i': bytes.push_back(0x36); break; // in
     case '=': bytes.push_back(0x2c); break;
     case '<':
       if (token.size() == 1) {
@@ -219,7 +220,7 @@ static void encodeGroup(std::vector<uint8_t>& bytes) {
 
 static void encodeComma(std::vector<uint8_t>& bytes, std::string token) {
   if (token == "comma") {
-    bytes.push_back(0x55);
+    //bytes.push_back(0x55);
   } else {
     bytes.push_back(0x0d);
   }
