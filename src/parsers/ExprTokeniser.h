@@ -22,6 +22,7 @@ protected:
   bool tokeniseVar(std::smatch& match);
   void tokeniseString();
   void shuntOp();
+  void shuntComma();
   void tokenise();
 public:
   ExprTokeniser(std::string input) : input_ {input} {}

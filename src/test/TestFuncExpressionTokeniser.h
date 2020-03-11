@@ -32,22 +32,23 @@ public:
   }
 
   void testMultiFuncs(void) {
-    // abs(3) * (4 + int(3.14)) * sgn(3.14) => 3 abs 4 3.14 int + * 3.14 sgn *
+    // abs(3) * (4 + int(3.14)) * sgn(3.14) => 3 abs 4 3.14 int + G * 3.14 sgn *
     std::string expr {"abs(3) * (4 + int(3.14)) * sgn(3.14)"s};
     ExprTokeniser tokeniser {expr};
 
     std::vector<std::string> tokens = tokeniser.getTokens();
 
-    TS_ASSERT_EQUALS(tokens.size(), 10);
+    TS_ASSERT_EQUALS(tokens.size(), 11);
     TS_ASSERT_EQUALS(tokens[0], "N3");
     TS_ASSERT_EQUALS(tokens[1], "Fabs");
     TS_ASSERT_EQUALS(tokens[2], "N4");
     TS_ASSERT_EQUALS(tokens[3], "N3.14");
     TS_ASSERT_EQUALS(tokens[4], "Fint");
     TS_ASSERT_EQUALS(tokens[5], "O+");
-    TS_ASSERT_EQUALS(tokens[6], "O*");
-    TS_ASSERT_EQUALS(tokens[7], "N3.14");
-    TS_ASSERT_EQUALS(tokens[8], "Fsgn");
-    TS_ASSERT_EQUALS(tokens[9], "O*");
+    TS_ASSERT_EQUALS(tokens[6], "G");
+    TS_ASSERT_EQUALS(tokens[7], "O*");
+    TS_ASSERT_EQUALS(tokens[8], "N3.14");
+    TS_ASSERT_EQUALS(tokens[9], "Fsgn");
+    TS_ASSERT_EQUALS(tokens[10], "O*");
   }
 };

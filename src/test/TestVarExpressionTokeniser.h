@@ -81,19 +81,20 @@ public:
   }
 
   void testVarsAndNums(void) {
-    // (a + 3 * b) - c => a 3 b * + c -
+    // (a + 3 * b) - c => a 3 b * + G c -
     std::string expr {"(a + 3 * b) - c"s};
     ExprTokeniser tokeniser {expr};
 
     std::vector<std::string> tokens = tokeniser.getTokens();
 
-    TS_ASSERT_EQUALS(tokens.size(), 7);
+    TS_ASSERT_EQUALS(tokens.size(), 8);
     TS_ASSERT_EQUALS(tokens[0], "Va");
     TS_ASSERT_EQUALS(tokens[1], "N3");
     TS_ASSERT_EQUALS(tokens[2], "Vb");
     TS_ASSERT_EQUALS(tokens[3], "O*");
     TS_ASSERT_EQUALS(tokens[4], "O+");
-    TS_ASSERT_EQUALS(tokens[5], "Vc");
-    TS_ASSERT_EQUALS(tokens[6], "O-");
+    TS_ASSERT_EQUALS(tokens[5], "G");
+    TS_ASSERT_EQUALS(tokens[6], "Vc");
+    TS_ASSERT_EQUALS(tokens[7], "O-");
   }
 };

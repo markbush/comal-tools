@@ -44,10 +44,10 @@ static void constByte(std::vector<std::string>& stack, std::vector<uint8_t>& lin
 }
 
 static void constReal(std::vector<std::string>& stack, std::vector<uint8_t>& line, size_t& pos) {
-  // TODO decode floating point
   int exponent = line[pos++];
   if (exponent == 0) {
     stack.push_back("0"s);
+    pos += 4;
     return;
   }
   exponent -= 0x81;

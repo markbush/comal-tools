@@ -23,8 +23,24 @@ public:
   }
 
   void testAddMulParens(void) {
-    // (a + b) * c => a b + c *
+    // (a + b) * c => a b + G c *
     std::string expr {"(12 + 34) * 56"s};
+    ExprTokeniser tokeniser {expr};
+
+    std::vector<std::string> tokens = tokeniser.getTokens();
+
+    TS_ASSERT_EQUALS(tokens.size(), 6);
+    TS_ASSERT_EQUALS(tokens[0], "N12");
+    TS_ASSERT_EQUALS(tokens[1], "N34");
+    TS_ASSERT_EQUALS(tokens[2], "O"+addOp);
+    TS_ASSERT_EQUALS(tokens[3], "G");
+    TS_ASSERT_EQUALS(tokens[4], "N56");
+    TS_ASSERT_EQUALS(tokens[5], "O"+mulOp);
+  }
+
+  void testNegAdd(void) {
+    // -(a + b) => a b + G neg
+    std::string expr {"-(12 + 34)"s};
     ExprTokeniser tokeniser {expr};
 
     std::vector<std::string> tokens = tokeniser.getTokens();
@@ -33,21 +49,7 @@ public:
     TS_ASSERT_EQUALS(tokens[0], "N12");
     TS_ASSERT_EQUALS(tokens[1], "N34");
     TS_ASSERT_EQUALS(tokens[2], "O"+addOp);
-    TS_ASSERT_EQUALS(tokens[3], "N56");
-    TS_ASSERT_EQUALS(tokens[4], "O"+mulOp);
-  }
-
-  void testNegAdd(void) {
-    // -(a + b) => a b + neg
-    std::string expr {"-(12 + 34)"s};
-    ExprTokeniser tokeniser {expr};
-
-    std::vector<std::string> tokens = tokeniser.getTokens();
-
-    TS_ASSERT_EQUALS(tokens.size(), 4);
-    TS_ASSERT_EQUALS(tokens[0], "N12");
-    TS_ASSERT_EQUALS(tokens[1], "N34");
-    TS_ASSERT_EQUALS(tokens[2], "O"+addOp);
-    TS_ASSERT_EQUALS(tokens[3], "U-");
+    TS_ASSERT_EQUALS(tokens[3], "G");
+    TS_ASSERT_EQUALS(tokens[4], "U-");
   }
 };
