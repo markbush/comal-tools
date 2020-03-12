@@ -10,6 +10,8 @@ using namespace std::string_literals;
 
 static Logger logger {"ParseCmds"s};
 
+static void encodeCmd(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos);
+
 static void encodeNull(std::vector<uint8_t>& bytes, size_t& pos) {
   bytes.push_back(0x71);
   pos += 3;
@@ -67,6 +69,10 @@ static void encodeDouble(std::vector<uint8_t>& bytes, double value) {
 
 static void encodeNumber(std::vector<uint8_t>& bytes, std::string token) {
   double valueD = std::stod(token);
+  if (0 < valueD && valueD < 1) {
+    encodeDouble(bytes, valueD);
+    return;
+  }
   uint16_t valueI = std::stoi(token);
   if (valueD != valueI) {
     encodeDouble(bytes, valueD);
@@ -120,7 +126,6 @@ static void encodeFunc(std::vector<uint8_t>& bytes, std::string token) {
 
 static void encodeOp(std::vector<uint8_t>& bytes, std::string token, std::string prev) {
   if (prev[0] == 'S' || prev[prev.size()-1] == '$') { // must be string op
-    logger.info("string op");
     switch (toLower(token[0])) {
       case '+': bytes.push_back(0x28); break;
       case '=': bytes.push_back(0x2d); break;
@@ -201,7 +206,7 @@ static void encodeUnary(std::vector<uint8_t>& bytes, std::string token) {
 }
 
 static void encodeString(std::vector<uint8_t>& bytes, std::string token) {
-  if (token.size() == 0) {
+  if (token.size() == 0 || token == "\"0\"") {
     bytes.push_back(0xcd);
     bytes.push_back(0x00);
   } else if (token.size() == 1) {
@@ -245,7 +250,7 @@ static void encodeToken(std::vector<uint8_t>& bytes, NameTable& names, std::stri
   }
 }
 
-static const std::regex regexNull("^null$", std::regex_constants::icase);
+static const std::regex regexNull("^null\\b", std::regex_constants::icase);
 static void encodeExpr(std::vector<uint8_t>& bytes, NameTable& names, std::string expr) {
   if (expr.size() == 0) return;
   std::smatch match;
@@ -273,9 +278,12 @@ static void skipSpace(std::string& line, size_t& pos) {
   while (pos<lineEnd && line[pos]==' ') pos++;
 }
 
-static void skipToSemiColon(std::string& line, size_t& pos) {
+static void skipToEndOfAssign(std::string& line, size_t& pos) {
   size_t lineEnd = line.size();
-  while (pos<lineEnd && line[pos]!=';') pos++;
+  while (pos<lineEnd && line[pos]!=';') {
+    if (pos < lineEnd-1 && line[pos] == '/' && line[pos+1] == '/') break;
+    pos++;
+  }
 }
 
 static void assignDelim(std::vector<uint8_t>& bytes) {
@@ -339,7 +347,7 @@ static bool checkAssign(std::vector<uint8_t>& bytes, NameTable& names, std::stri
         break;
     }
   }
-  skipToSemiColon(line, pos);
+  skipToEndOfAssign(line, pos);
   return true;
 }
 
@@ -464,17 +472,22 @@ static void encodeFor(std::smatch& match, std::vector<uint8_t>& bytes, NameTable
     encodeExpr(bytes, names, stepExpr);
     bytes.push_back(0x86);
   }
-  if (doExpr == "") {
+  if (doExpr == "" || (doExpr.size() > 1 && doExpr[0] == '/' && doExpr[1] == '/')) {
     bytes.push_back(0x87); // multi line for
+    pos = line.size() - doExpr.size();
   } else {
     bytes.push_back(0x88); // one line for
     size_t exprPos = 0;
-    if (!checkAssign(bytes, names, doExpr, exprPos)) {
-      encodeExpr(bytes, names, doExpr);
-    }
+    encodeCmd(bytes, names, doExpr, exprPos);
     bytes.push_back(0x89);
+    size_t remaining = doExpr.size() - exprPos;
+    pos = line.size()-remaining;
   }
-  pos = line.size();
+}
+
+static void encodeEnd(std::vector<uint8_t>& bytes, size_t& pos) {
+  bytes.push_back(0x9f);
+  pos += 3;
 }
 
 static void encodeEndFor(std::smatch& match, std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
@@ -521,6 +534,30 @@ static std::vector<std::string> findProcParams(std::string paramString) {
     params.push_back(param);
   }
   return params;
+}
+
+static void encodeImport(std::smatch& match, std::vector<uint8_t>& bytes, NameTable& names, size_t& pos) {
+  std::string fullLine = match[0];
+  std::string importString = match[1];
+
+  bytes.push_back(0xeb);
+  bytes.push_back(0x00);
+  bytes.push_back(0x00);
+
+  std::vector<std::string> imports = findProcParams(importString);
+  for (auto& import : imports) {
+    bytes.push_back(0x72); // FIXME determine correct value
+    uint8_t type = 0x00; // FIXME determine correct value
+    names.add(import, type);
+    uint16_t offset = names.offset(import, type);
+    uint8_t offsetHigh = offset/256;
+    uint8_t offsetLow = offset&0xff;
+    bytes.push_back(offsetLow);
+    bytes.push_back(offsetHigh);
+  }
+
+  bytes.push_back(0xef);
+  pos += fullLine.size();
 }
 
 // proc\\s+([a-z][0-9a-z']+)(\\(([^\\)]+)\\))?(\\s*closed)?
@@ -607,6 +644,11 @@ static void encodeEndProc(std::smatch& match, std::vector<uint8_t>& bytes, NameT
   bytes.push_back(offsetHigh);
 }
 
+static void encodeEndWhile(std::vector<uint8_t>& bytes, size_t& pos) {
+  bytes.push_back(0x9b);
+  pos += 8;
+}
+
 static void encodeStop(std::vector<uint8_t>& bytes, size_t& pos) {
   bytes.push_back(0xa0);
   pos += 4;
@@ -636,6 +678,43 @@ static void encodeTime(std::smatch& match, std::vector<uint8_t>& bytes, NameTabl
   pos += fullLine.size();
 }
 
+static void encodeUse(std::smatch& match, std::vector<uint8_t>& bytes, NameTable& names, size_t& pos) {
+  std::string fullLine = match[0];
+  std::string package = match[1];
+
+  bytes.push_back(0xd4);
+
+  uint8_t type = 0x18;
+  names.add(package, type);
+  uint16_t offset = names.offset(package, type);
+  uint8_t offsetHigh = offset/256;
+  uint8_t offsetLow = offset&0xff;
+  bytes.push_back(offsetLow);
+  bytes.push_back(offsetHigh);
+
+  pos += fullLine.size();
+}
+
+// while\\s+(.+)\\s+do(\\s+(.*))?
+static void encodeWhile(std::smatch& match, std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
+  std::string expr = match[1];
+  std::string doExpr = match[3];
+
+  bytes.push_back(0x97);
+  encodeExpr(bytes, names, expr);
+
+  if (doExpr == "" || (doExpr.size() > 1 && doExpr[0] == '/' && doExpr[1] == '/')) {
+    pos = line.size() - doExpr.size();
+  } else {
+    bytes.push_back(0x99); // one line while
+    size_t exprPos = 0;
+    encodeCmd(bytes, names, doExpr, exprPos);
+    size_t remaining = doExpr.size() - exprPos;
+    pos = line.size()-remaining;
+  }
+  bytes.push_back(0x9a);
+}
+
 static void encodeZone(std::smatch& match, std::vector<uint8_t>& bytes, NameTable& names, size_t& pos) {
   std::string fullLine = match[0];
   std::string expr = match[1];
@@ -654,15 +733,19 @@ static void encodeD(std::vector<uint8_t>& bytes, NameTable& names, std::string& 
   if (std::regex_search(lineToMatch, match, regexStringDim)) { encodeStringDim(match, bytes, names, line, pos); return; }
 }
 
+static const std::regex regexEnd("^end\\b", std::regex_constants::icase);
 static const std::regex regexEndFor("^endfor(\\s+([a-z][0-9a-z']*)(#|))?", std::regex_constants::icase);
 static const std::regex regexEndProc("^endproc(\\s+([a-z][0-9a-z']*))?", std::regex_constants::icase);
+static const std::regex regexEndWhile("^endwhile\\b", std::regex_constants::icase);
 static void encodeE(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
   size_t lineEnd = line.size();
   std::string lineToMatch = line.substr(pos-1, lineEnd-pos+1);
   std::smatch match;
 
+  if (std::regex_search(lineToMatch, match, regexEnd)) { encodeEnd(bytes, pos); return; }
   if (std::regex_search(lineToMatch, match, regexEndFor)) { encodeEndFor(match, bytes, names, line, pos); return; }
   if (std::regex_search(lineToMatch, match, regexEndProc)) { encodeEndProc(match, bytes, names, line, pos); return; }
+  if (std::regex_search(lineToMatch, match, regexEndWhile)) { encodeEndWhile(bytes, pos); return; }
 }
 
 static const std::regex regexFor("^for\\s+([a-z][0-9a-z']*)(#|):=\\s*(.+)\\s+to\\s+(.+)\\s+do(\\s*(.*))", std::regex_constants::icase);
@@ -672,6 +755,15 @@ static void encodeF(std::vector<uint8_t>& bytes, NameTable& names, std::string& 
   std::smatch match;
 
   if (std::regex_search(lineToMatch, match, regexFor)) { encodeFor(match, bytes, names, line, pos); return; }
+}
+
+static const std::regex regexImport("^import\\s+([,0-9a-z' #\\$]+)", std::regex_constants::icase);
+static void encodeI(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
+  size_t lineEnd = line.size();
+  std::string lineToMatch = line.substr(pos-1, lineEnd-pos+1);
+  std::smatch match;
+
+  if (std::regex_search(lineToMatch, match, regexImport)) { encodeImport(match, bytes, names, pos); return; }
 }
 
 static void encodeN(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
@@ -701,7 +793,7 @@ static void encodeS(std::vector<uint8_t>& bytes, NameTable& names, std::string& 
 }
 
 static const std::regex regexTrap("^trap\\s+esc\\s*(\\+|-)", std::regex_constants::icase);
-static const std::regex regexTime("^time\\s*(.+)", std::regex_constants::icase);
+static const std::regex regexTime("^time\\s+(.+)", std::regex_constants::icase);
 static void encodeT(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
   size_t lineEnd = line.size();
   std::string lineToMatch = line.substr(pos-1, lineEnd-pos+1);
@@ -711,7 +803,25 @@ static void encodeT(std::vector<uint8_t>& bytes, NameTable& names, std::string& 
   if (std::regex_search(lineToMatch, match, regexTime)) { encodeTime(match, bytes, names, pos); return; }
 }
 
-static const std::regex regexZone("^zone\\s*(.+)", std::regex_constants::icase);
+static const std::regex regexUse("^use\\s+([a-z][0-9a-z']*)", std::regex_constants::icase);
+static void encodeU(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
+  size_t lineEnd = line.size();
+  std::string lineToMatch = line.substr(pos-1, lineEnd-pos+1);
+  std::smatch match;
+
+  if (std::regex_search(lineToMatch, match, regexUse)) { encodeUse(match, bytes, names, pos); return; }
+}
+
+static const std::regex regexWhile("^while\\s+(.+)\\s+do(\\s+(.*))?", std::regex_constants::icase);
+static void encodeW(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
+  size_t lineEnd = line.size();
+  std::string lineToMatch = line.substr(pos-1, lineEnd-pos+1);
+  std::smatch match;
+
+  if (std::regex_search(lineToMatch, match, regexWhile)) { encodeWhile(match, bytes, names, line, pos); return; }
+}
+
+static const std::regex regexZone("^zone\\s+(.+)", std::regex_constants::icase);
 static void encodeZ(std::vector<uint8_t>& bytes, NameTable& names, std::string& line, size_t& pos) {
   size_t lineEnd = line.size();
   std::string lineToMatch = line.substr(pos-1, lineEnd-pos+1);
@@ -733,10 +843,13 @@ static void encodeCmd(std::vector<uint8_t>& bytes, NameTable& names, std::string
     case 'D': encodeD(bytes, names, line, pos); break;
     case 'E': encodeE(bytes, names, line, pos); break;
     case 'F': encodeF(bytes, names, line, pos); break;
+    case 'I': encodeI(bytes, names, line, pos); break;
     case 'N': encodeN(bytes, names, line, pos); break;
     case 'P': encodeP(bytes, names, line, pos); break;
     case 'S': encodeS(bytes, names, line, pos); break;
     case 'T': encodeT(bytes, names, line, pos); break;
+    case 'U': encodeU(bytes, names, line, pos); break;
+    case 'W': encodeW(bytes, names, line, pos); break;
     case 'Z': encodeZ(bytes, names, line, pos); break;
     default: pos = lineEnd; break;
   }

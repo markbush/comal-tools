@@ -19,6 +19,7 @@ static std::string toLower(std::string value) {
 }
 
 static int precedence(std::string op) {
+  if (op == "Ccomma"s) return 1;
   if (op=="Oor"s) return 2;
   if (op=="Oand"s) return 3;
   if (op=="O="s || op=="O<>"s || op=="O<"s || op=="O>"s || op=="O<="s || op=="O>="s || op=="Oin"s) return 4;
@@ -119,16 +120,17 @@ bool ExprTokeniser::tokeniseOp(std::smatch& match) {
   size_t matchedChars = op.size();
   if (op.size() > 0) {
     if (op == ",") {
-      operators.push_back("Ccomma"s);
+      op = "Ccomma"s;
     } else {
-      int p = precedence("O"+op);
-
-      while (operators.size() > 0 && operators.back() != "(" && precedence(operators.back()) >= p) {
-        shuntOp();
-      }
-
-      operators.push_back("O"+op);
+      op = "O"+op;
     }
+    int p = precedence(op);
+
+    while (operators.size() > 0 && operators.back() != "(" && precedence(operators.back()) >= p) {
+      shuntOp();
+    }
+
+    operators.push_back(op);
 
     input_ = input_.substr(matchedChars, inputSize-matchedChars);
     unaryAllowed = true;
@@ -211,8 +213,8 @@ static const std::regex regexVar("^([a-z][a-z0-9'\\\\\\[\\]_]*(#|\\$|))");
 
 // tokenise using shunting yard algorithm
 void ExprTokeniser::tokenise() {
-  std::smatch match;
   skipSpace();
+  std::smatch match;
   size_t inputSize = input_.size();
   if (inputSize == 0) return;
   unaryAllowed = false;
@@ -235,7 +237,9 @@ std::vector<std::string> ExprTokeniser::getTokens() {
   // TODO stop parsing at end of valid expression
   if (tokens.size() == 0) {
     while (input_.size() > 0) {
+      skipSpace();
       if (input_[0] == ';') break; // end of expression
+      if (input_[0] == '/' && input_.size() > 1 && input_[1] == '/') break; // comment
       if (unaryAllowed) {
         tokeniseUnary();
       }

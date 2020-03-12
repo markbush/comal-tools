@@ -67,6 +67,9 @@ static void constReal(std::vector<std::string>& stack, std::vector<uint8_t>& lin
   char buf[64];
   snprintf(buf, 64, "%Lg", mantissa);
   std::string result(buf, strlen(buf));
+  if (buf[0] == '0' && buf[1] == '.') {
+    result = result.substr(1, result.size()-1); // 0.nnn => .nnn
+  }
   stack.push_back(result);
 }
 
@@ -281,6 +284,10 @@ static void whileDo(std::vector<std::string>& stack) {
 
 static void whileEnd(std::vector<std::string>& stack) {
   binaryOp(stack, ""s);
+}
+
+static void endWhile(std::vector<std::string>& stack) {
+  stack.push_back(" ENDWHILE"s);
 }
 
 static void proc(std::vector<std::string>& stack) {
@@ -528,6 +535,7 @@ static void handleOp(std::vector<std::string>& stack, std::map<size_t,std::strin
     case 0x97: whileLoop(stack); break;
     case 0x99: whileDo(stack); break;
     case 0x9a: whileEnd(stack); break;
+    case 0x9b: endWhile(stack); break;
     case 0x9f: end(stack); break;
     case 0xa0: stop(stack); break;
     case 0xbf: keyword(stack, " TRAP"s); break;
